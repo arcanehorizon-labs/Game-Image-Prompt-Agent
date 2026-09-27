@@ -1,64 +1,117 @@
 # Game Image Prompt Agent (GIPA)
 
-GIPA converts a game's GDD and bounded repository evidence into a validated image-asset plan and, in later phases, production-ready prompts for image generators such as ChatGPT Images and Gemini Images.
+GIPA reads a game's GDD, optionally inspects a bounded game repository, creates a reviewable image-asset inventory, and compiles production-ready prompts for ChatGPT Images and Gemini Images with exact target dimensions and a shared game art direction.
 
-## Current milestone: GIPA-0
+GIPA does not generate images. Image generation remains a manual step so users can review quality before committing assets.
 
-GIPA-0 establishes the deterministic foundation only:
+## Workflow
 
-- project/config structure;
-- JSON Schemas for state, art style, asset manifests, asset specs, and prompt packs;
-- deterministic manifest validation;
-- duplicate asset/file detection;
-- dimension-to-aspect-ratio validation;
-- explicit alpha-decision validation;
-- state-transition validation;
-- `gipa status` and `gipa validate` CLI commands;
-- tests for the above behavior.
+1. Read the GDD and extract traceable visual-style and asset evidence.
+2. Optionally scan the game repository for existing images and source references.
+3. Produce ART_STYLE.yaml, ASSET_MANIFEST.yaml, and ASSET_REVIEW.md.
+4. Stop for human approval.
+5. Generate one structured specification per required asset.
+6. Compile three variants per asset: canonical, ChatGPT Images, and Gemini Images.
+7. Validate schemas, filenames, dimensions, alpha decisions, and exact-dimension text in prompts.
 
-No LLM, prompt generation, provider integration, or image generation is implemented in GIPA-0.
+If the GDD does not provide enough art-direction evidence, planning is blocked instead of inventing the game's visual identity.
 
-## Development setup
+## Install
 
-```powershell
+~~~powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 pytest
-```
+~~~
 
-## CLI
+## End-to-end usage
 
-Validate the example state:
+~~~powershell
+gipa plan --gdd "E:\game\docs\GDD.md" --game-root "E:\game" --out "E:\game\.ai-assets"
+~~~
 
-```powershell
-gipa validate state examples/STATE.yaml
-```
+Review ART_STYLE.yaml, ASSET_MANIFEST.yaml, and ASSET_REVIEW.md. You may edit the manifest before approval, for example to replace a category fallback dimension with a known implementation-specific dimension.
 
-Validate the example asset manifest:
+~~~powershell
+gipa approve --out "E:\game\.ai-assets"
+gipa prompts --out "E:\game\.ai-assets"
+gipa validate-project --out "E:\game\.ai-assets"
+gipa status --state "E:\game\.ai-assets\STATE.yaml"
+~~~
 
-```powershell
-gipa validate manifest examples/ASSET_MANIFEST.yaml
-```
+## Outputs
 
-Show project state:
+~~~text
+.ai-assets/
+  STATE.yaml
+  ART_STYLE.yaml
+  ASSET_MANIFEST.yaml
+  ASSET_REVIEW.md
+  GDD_ANALYSIS.json
+  REPOSITORY_SCAN.json
+  specs/
+    <asset-id>.yaml
+  prompts/
+    canonical.json
+    chatgpt_images.json
+    gemini_images.json
+    IMAGE_PROMPTS.md
+    CHATGPT_IMAGE_PROMPTS.md
+    GEMINI_IMAGE_PROMPTS.md
+  VALIDATION.md
+~~~
 
-```powershell
-gipa status --state examples/STATE.yaml
-```
+## Dimension precedence
 
-## Planned phases
+The intended resolution order is implementation requirement, existing resource convention, explicit GDD requirement, platform requirement, project configuration, documented category fallback, then human clarification.
 
-| Phase | Scope |
-|---|---|
-| GIPA-0 | Deterministic foundation, config, schemas, CLI and tests |
-| GIPA-1 | GDD parsing and art-style extraction |
-| GIPA-2 | Asset inventory and gameplay-semantic classification |
-| GIPA-3 | Bounded repository inspection and dimension/naming resolution |
-| GIPA-4 | Human approval gate and asset specifications |
-| GIPA-5 | Canonical prompt compiler and provider adapters |
-| GIPA-6 | Validation hardening and AI Game Factory integration contract |
+The current v1 planner records fallback dimensions explicitly as category_default. Repository inspection is bounded and never silently overrides a reviewed manifest. A user can replace fallback dimensions in ASSET_MANIFEST.yaml before approval; those reviewed values become authoritative for specs and prompts.
 
-## Design principle
+## Prompt consistency
 
-A provider-independent canonical specification is the semantic source of truth. Provider adapters may alter capability-specific syntax later, but they must not change asset meaning, visual identity, dimensions, or gameplay constraints.
+All prompts are compiled from the same structured specification and ART_STYLE.yaml. Provider adapters add only lightweight framing and must not change dimensions, aspect ratio, camera, asset semantics, required or forbidden elements, or project art direction.
+
+Three visual-treatment variants are emitted for each asset while preserving those invariants.
+
+## Repository inspection
+
+Repository scanning is optional. It is bounded by file count and file size, excludes common build/cache directories, inventories existing images, and finds direct image-path references in common source/config files. It does not perform broad semantic indexing or send repository content to an external provider.
+
+## v1 scope
+
+Implemented:
+- GDD Markdown/text parsing;
+- art-direction evidence extraction;
+- asset candidate discovery;
+- human review gate;
+- optional bounded repository scan;
+- deterministic category dimension fallbacks;
+- structured asset specs;
+- gameplay-aware exclusions for environment textures;
+- three prompt variants;
+- ChatGPT Images and Gemini Images prompt adapters;
+- schema/package validation;
+- end-to-end CLI;
+- automated tests.
+
+Not implemented by design:
+- automatic image generation;
+- automatic commits of generated images;
+- hidden provider calls;
+- arbitrary visual-style invention when the GDD is ambiguous.
+
+## Validation sample
+
+~~~powershell
+gipa plan --gdd examples/SAMPLE_GDD.md --out .tmp-assets
+gipa approve --out .tmp-assets
+gipa prompts --out .tmp-assets
+gipa validate-project --out .tmp-assets
+~~~
+
+Expected final line:
+
+~~~text
+GIPA project validation PASS
+~~~
