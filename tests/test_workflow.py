@@ -115,3 +115,32 @@ def test_existing_repository_asset_suppresses_duplicate_generation_and_sets_dime
     assert camera["generation"]["required"] is False
     assert camera["dimensions"]["source"]["type"]=="existing_resource"
     assert (camera["dimensions"]["width"],camera["dimensions"]["height"])==(512,256)
+
+
+def test_build_outputs_are_excluded_and_missing_reference_becomes_target_asset(tmp_path: Path) -> None:
+    game=tmp_path/"game"
+    source=game/"Source"
+    source.mkdir(parents=True)
+    build=game/"build_x64"/"bin"
+    build.mkdir(parents=True)
+    Image.new("RGBA",(64,64)).save(build/"door.png")
+    (source/"Scene.cpp").write_text('auto door = Sprite::create("Content/Art/Entities/door.png");',encoding="utf-8")
+
+    gdd=tmp_path/"gdd.md"
+    gdd.write_text(
+        "# Repo Missing Game\n\n## Art Direction\nStylized 3D with readable top-down silhouettes.\n\n"
+        "## High Concept\nThe player avoids guards and doors.\n",
+        encoding="utf-8",
+    )
+
+    out=tmp_path/"out"
+    plan(gdd,out,game_root=game)
+    manifest=yaml.safe_load((out/"ASSET_MANIFEST.yaml").read_text(encoding="utf-8"))
+    door=next(a for a in manifest["assets"] if a["concept"]=="door")
+    assert door["generation"]["required"] is True
+    assert door["generation"]["reason"]=="missing_repository_reference"
+    assert door["target_path"]=="Content/Art/Entities/door.png"
+    assert door["filename"]=="door.png"
+
+    scan=yaml.safe_load((out/"STATE.yaml").read_text(encoding="utf-8"))
+    assert scan["inputs"]["repository_scan"]["enabled"] is True
