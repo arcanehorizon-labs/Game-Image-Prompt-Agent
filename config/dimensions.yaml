@@ -1,0 +1,37 @@
+schema_version: 1
+defaults:
+  seamless_environment_texture:
+    width: 2048
+    height: 2048
+    aspect_ratio: "1:1"
+    alpha: false
+  object_sprite:
+    width: 1024
+    height: 1024
+    aspect_ratio: "1:1"
+    alpha: true
+  character_source:
+    width: 2048
+    height: 2048
+    aspect_ratio: "1:1"
+    alpha: true
+  background_landscape:
+    width: 2560
+    height: 1440
+    aspect_ratio: "16:9"
+    alpha: false
+  background_portrait:
+    width: 1440
+    height: 2560
+    aspect_ratio: "9:16"
+    alpha: false
+  splash_landscape:
+    width: 2560
+    height: 1440
+    aspect_ratio: "16:9"
+    alpha: false
+  splash_portrait:
+    width: 1440
+    height: 2560
+    aspect_ratio: "9:16"
+    alpha: false
