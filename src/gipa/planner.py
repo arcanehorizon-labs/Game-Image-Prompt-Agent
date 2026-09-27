@@ -52,12 +52,21 @@ def build_manifest(analysis: dict,defaults: dict,repo_scan: dict | None=None) ->
         names[base]=names.get(base,0)+1
         asset_id=base if names[base]==1 else f"{base}_{names[base]:02d}"
         key=CATEGORY_DEFAULT_MAP.get(category,"object_sprite")
-        dim=defaults[key]
+        fallback=defaults[key]
+        if "dimensions" in candidate:
+            width=int(candidate["dimensions"]["width"])
+            height=int(candidate["dimensions"]["height"])
+            dimension_source={"type":"gdd","reference":candidate["section"]}
+        else:
+            width=int(fallback["width"])
+            height=int(fallback["height"])
+            dimension_source={"type":"category_default","rule":key}
+        alpha=bool(candidate["alpha"]) if "alpha" in candidate else bool(fallback.get("alpha",True))
         filename=f"{asset_id}.png"
         assets.append({
             "asset_id":asset_id,"filename":filename,"category":category,"description":candidate["description"],
-            "dimensions":{"width":int(dim["width"]),"height":int(dim["height"]),"aspect_ratio":dim.get("aspect_ratio") or _ratio(int(dim["width"]),int(dim["height"])),"source":{"type":"category_default","rule":key}},
-            "output":{"format":"png","alpha":bool(dim.get("alpha",True))},
+            "dimensions":{"width":width,"height":height,"aspect_ratio":_ratio(width,height),"source":dimension_source},
+            "output":{"format":"png","alpha":alpha},
             "generation":{"required":filename.lower() not in existing,"reason":"existing_filename" if filename.lower() in existing else ("derived_requirement" if candidate["confidence"]=="derived" else "gdd_requirement")},
             "source_trace":{"requirement":{"type":"rule" if candidate["confidence"]=="derived" else "gdd","reference":candidate.get("derivation",candidate["section"]),"text":candidate["description"]}},
             "confidence":candidate["confidence"],
