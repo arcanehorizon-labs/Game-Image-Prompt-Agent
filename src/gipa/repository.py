@@ -41,12 +41,28 @@ def _is_relevant_asset_reference(value: str) -> bool:
     lower=value.lower()
     return any(marker in lower for marker in ("content/","resources/","assets/","art/"))
 
+def _detect_platforms(root: Path) -> list[str]:
+    platforms=[]
+    checks=(
+        ("android",("proj.android","android")),
+        ("ios",("proj.ios_mac","ios")),
+        ("windows",("proj.win32","proj.winrt")),
+        ("linux",("proj.linux",)),
+        ("wasm",("proj.wasm",)),
+    )
+    names={path.name.lower() for path in root.iterdir()} if root.exists() else set()
+    for platform,markers in checks:
+        if any(marker.lower() in names for marker in markers):
+            platforms.append(platform)
+    return platforms
+
 def scan_repository(root: Path) -> dict:
     """Collect source-image metadata and detect referenced-but-missing art resources."""
     images=[]
     references=[]
+    platforms=_detect_platforms(root)
     if not root.exists():
-        return {"enabled":True,"root":str(root),"status":"missing","images":[],"references":[],"missing_references":[]}
+        return {"enabled":True,"root":str(root),"status":"missing","platforms":[],"images":[],"references":[],"missing_references":[]}
     for path in _bounded_files(root):
         rel=path.relative_to(root).as_posix()
         if path.suffix.lower() in IMAGE_EXTENSIONS:
@@ -87,7 +103,7 @@ def scan_repository(root: Path) -> dict:
             item["referenced_from"].append(ref["source"])
 
     return {
-        "enabled":True,"root":str(root),"status":"ok",
+        "enabled":True,"root":str(root),"status":"ok","platforms":platforms,
         "images":images[:1500],
         "references":references[:2000],
         "missing_references":missing[:500],
