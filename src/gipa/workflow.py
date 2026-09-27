@@ -1,4 +1,4 @@
-"""End-to-end GIPA v1 workflow."""
+"""End-to-end GIPA workflow."""
 from __future__ import annotations
 from pathlib import Path
 import json
@@ -7,7 +7,7 @@ from .gdd import analyze_gdd
 from .io import write_json, write_text, write_yaml
 from .planner import build_art_style, build_manifest, load_dimensions
 from .prompts import adapt_chatgpt, adapt_gemini, compile_canonical, prompt_record
-from .render import prompts_markdown, review_markdown
+from .render import batch_prompts_markdown, prompts_markdown, review_markdown
 from .repository import scan_repository
 from .specs import build_asset_spec
 from .validation import validate_manifest_rules, validate_schema
@@ -28,7 +28,6 @@ def _load_style_override(style_file: Path | None) -> dict | None:
     return data
 
 def plan(gdd: Path,out: Path,game_root: Path | None=None,style_file: Path | None=None) -> dict:
-    """Analyze a GDD and create the proposed human-review asset plan."""
     analysis=analyze_gdd(gdd)
     style=build_art_style(analysis,_load_style_override(style_file))
     repo_scan=scan_repository(game_root) if game_root else {"enabled":False,"images":[],"references":[]}
@@ -43,24 +42,15 @@ def plan(gdd: Path,out: Path,game_root: Path | None=None,style_file: Path | None
     status="blocked" if style["confidence"]=="uncertain" else "awaiting_human_approval"
     state={
         "schema_version":1,"phase":"asset_inventory","status":status,
-        "inputs":{
-            "gdd":{"path":str(gdd)},
-            "repository_scan":{"enabled":bool(game_root),"root":str(game_root) if game_root else None},
-            "style_override":{"enabled":bool(style_file),"path":str(style_file) if style_file else None},
-        },
+        "inputs":{"gdd":{"path":str(gdd)},"repository_scan":{"enabled":bool(game_root),"root":str(game_root) if game_root else None},"style_override":{"enabled":bool(style_file),"path":str(style_file) if style_file else None}},
         "outputs":{"art_style":str(out/"ART_STYLE.yaml"),"manifest":str(out/"ASSET_MANIFEST.yaml"),"review":str(out/"ASSET_REVIEW.md")},
         "counts":{"total_assets":len(manifest["assets"]),"explicit":sum(a["confidence"]=="explicit" for a in manifest["assets"]),"derived":sum(a["confidence"]=="derived" for a in manifest["assets"]),"uncertain":sum(a["confidence"]=="uncertain" for a in manifest["assets"])},
-        "next_action":{
-            "type":"resolve_blocker" if status=="blocked" else "human_review",
-            "artifact":str(out/"ASSET_REVIEW.md"),
-            "message":"Provide an approved style override and rerun plan." if status=="blocked" else "Review and approve the asset inventory.",
-        },
+        "next_action":{"type":"resolve_blocker" if status=="blocked" else "human_review","artifact":str(out/"ASSET_REVIEW.md"),"message":"Provide an approved style override and rerun plan." if status=="blocked" else "Review and approve the asset inventory."},
     }
     write_yaml(out/"STATE.yaml",state)
     return state
 
 def approve(out: Path) -> dict:
-    """Approve a non-blocked asset inventory and create asset specifications."""
     state=yaml.safe_load((out/"STATE.yaml").read_text(encoding="utf-8"))
     style=yaml.safe_load((out/"ART_STYLE.yaml").read_text(encoding="utf-8"))
     manifest=yaml.safe_load((out/"ASSET_MANIFEST.yaml").read_text(encoding="utf-8"))
@@ -69,23 +59,26 @@ def approve(out: Path) -> dict:
     manifest["status"]="approved"
     write_yaml(out/"ASSET_MANIFEST.yaml",manifest)
     specs_dir=out/"specs"
+    if specs_dir.exists():
+        for old in specs_dir.glob("*.yaml"):
+            old.unlink()
     for asset in manifest["assets"]:
         if asset["generation"]["required"]:
-            write_yaml(specs_dir/f"{asset['asset_id']}.yaml",build_asset_spec(asset))
+            write_yaml(specs_dir/f"{asset['asset_id']}.yaml",build_asset_spec(asset,style))
     state["phase"]="asset_specs"; state["status"]="complete"; state["outputs"]["specs"]=str(specs_dir)
     state["next_action"]={"type":"run_command","command":f"gipa prompts --out {out}","message":"Compile the approved prompt pack."}
     write_yaml(out/"STATE.yaml",state)
     return state
 
 def prompts(out: Path) -> dict:
-    """Compile canonical plus ChatGPT/Gemini prompt packs from approved specs."""
     state=yaml.safe_load((out/"STATE.yaml").read_text(encoding="utf-8"))
     manifest=yaml.safe_load((out/"ASSET_MANIFEST.yaml").read_text(encoding="utf-8"))
     style=yaml.safe_load((out/"ART_STYLE.yaml").read_text(encoding="utf-8"))
     if manifest.get("status")!="approved":
         raise ValueError("Asset manifest must be approved before prompt compilation.")
     records={"canonical":[],"chatgpt_images":[],"gemini_images":[]}
-    for spec_path in sorted((out/"specs").glob("*.yaml")):
+    specs_dir=out/"specs"
+    for spec_path in sorted(specs_dir.glob("*.yaml")):
         spec=yaml.safe_load(spec_path.read_text(encoding="utf-8"))
         for variant in ("A","B","C"):
             canonical=compile_canonical(spec,style,variant)
@@ -98,13 +91,15 @@ def prompts(out: Path) -> dict:
     write_text(prompt_dir/"IMAGE_PROMPTS.md",prompts_markdown(manifest["game"],"Canonical",records["canonical"]))
     write_text(prompt_dir/"CHATGPT_IMAGE_PROMPTS.md",prompts_markdown(manifest["game"],"ChatGPT Images",records["chatgpt_images"]))
     write_text(prompt_dir/"GEMINI_IMAGE_PROMPTS.md",prompts_markdown(manifest["game"],"Gemini Images",records["gemini_images"]))
+    write_text(prompt_dir/"BATCH_PROMPTS.md",batch_prompts_markdown(manifest["game"],"Canonical",records["canonical"]))
+    write_text(prompt_dir/"CHATGPT_BATCH_PROMPTS.md",batch_prompts_markdown(manifest["game"],"ChatGPT Images",records["chatgpt_images"]))
+    write_text(prompt_dir/"GEMINI_BATCH_PROMPTS.md",batch_prompts_markdown(manifest["game"],"Gemini Images",records["gemini_images"]))
     state["phase"]="prompt_compilation"; state["status"]="complete"; state["outputs"]["prompts"]=str(prompt_dir)
     state["next_action"]={"type":"run_command","command":f"gipa validate-project --out {out}","message":"Validate the completed prompt package."}
     write_yaml(out/"STATE.yaml",state)
     return state
 
 def validate_project(out: Path) -> list[str]:
-    """Validate final machine-readable artifacts and prompt invariants."""
     errors=[]
     state=yaml.safe_load((out/"STATE.yaml").read_text(encoding="utf-8"))
     style=yaml.safe_load((out/"ART_STYLE.yaml").read_text(encoding="utf-8"))
@@ -133,6 +128,9 @@ def validate_project(out: Path) -> list[str]:
             d=record["production_dimensions"]
             marker=f"{d['width']} × {d['height']} pixels"
             if marker not in record["text"]:
-                errors.append(f"{path.name}/{record['asset_id']}: missing exact production dimensions in prompt")
+                errors.append(f"{path.name}/{record['asset_id']}: missing exact target production dimensions in prompt")
+    for filename in ("IMAGE_PROMPTS.md","CHATGPT_IMAGE_PROMPTS.md","GEMINI_IMAGE_PROMPTS.md","BATCH_PROMPTS.md","CHATGPT_BATCH_PROMPTS.md","GEMINI_BATCH_PROMPTS.md"):
+        if not (out/"prompts"/filename).exists():
+            errors.append(f"missing rendered prompt file: {filename}")
     write_text(out/"VALIDATION.md","# Validation\n\n"+("PASS\n" if not errors else "FAILED\n\n"+"\n".join(f"- {e}" for e in errors)+"\n"))
     return errors
