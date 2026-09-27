@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "asset-spec.schema.json",
+  "type": "object",
+  "required": ["schema_version", "asset_id", "purpose", "dimensions", "output", "visual_requirements", "confidence"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "asset_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$"},
+    "purpose": {"type": ["string", "array"]},
+    "dimensions": {"$ref": "#/$defs/dimensions"},
+    "output": {
+      "type": "object",
+      "required": ["format", "alpha"],
+      "properties": {
+        "format": {"enum": ["png", "jpg", "jpeg", "webp"]},
+        "alpha": {"type": "boolean"}
+      },
+      "additionalProperties": true
+    },
+    "visual_requirements": {
+      "type": "object",
+      "required": ["include", "exclude"],
+      "properties": {
+        "include": {"type": "array", "items": {"type": "string"}},
+        "exclude": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": true
+    },
+    "confidence": {"enum": ["explicit", "derived", "uncertain"]}
+  },
+  "$defs": {
+    "dimensions": {
+      "type": "object",
+      "required": ["production", "aspect_ratio"],
+      "properties": {
+        "production": {
+          "type": "object",
+          "required": ["width", "height"],
+          "properties": {
+            "width": {"type": "integer", "minimum": 1},
+            "height": {"type": "integer", "minimum": 1}
+          },
+          "additionalProperties": false
+        },
+        "aspect_ratio": {"type": "string", "pattern": "^[1-9][0-9]*:[1-9][0-9]*$"}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}
