@@ -1,0 +1,29 @@
+schema_version: 1
+asset_types:
+  - visual_only
+  - gameplay_object
+  - environment_texture
+  - environment_background
+  - character
+  - enemy
+  - prop
+  - ui
+  - vfx
+  - store_asset
+  - launcher_asset
+  - splash_asset
+
+rules:
+  environment_texture:
+    forbid_baked_gameplay_geometry: true
+    require_dimensions: true
+    require_alpha_decision: true
+  character:
+    require_dimensions: true
+    require_alpha_decision: true
+  enemy:
+    require_dimensions: true
+    require_alpha_decision: true
+  prop:
+    require_dimensions: true
+    require_alpha_decision: true
