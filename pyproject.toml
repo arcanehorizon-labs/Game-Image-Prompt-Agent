@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "game-image-prompt-agent"
-version = "0.1.0"
-description = "Deterministic foundation for GDD-driven image asset planning and prompt generation."
+version = "1.0.0"
+description = "GDD-driven game image asset planning and prompt generation for ChatGPT Images and Gemini Images."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
