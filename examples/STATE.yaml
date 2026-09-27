@@ -1,0 +1,15 @@
+schema_version: 1
+phase: foundation
+status: complete
+inputs: {}
+outputs:
+  schemas: schemas/
+  config: config/
+counts:
+  total_assets: 0
+  explicit: 0
+  derived: 0
+  uncertain: 0
+next_action:
+  type: run_command
+  command: "gipa validate state examples/STATE.yaml"
