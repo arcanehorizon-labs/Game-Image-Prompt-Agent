@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "art-style.schema.json",
+  "type": "object",
+  "required": ["schema_version", "game", "visual_style", "sources", "confidence"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "game": {"type": "object", "required": ["title"], "properties": {"title": {"type": "string", "minLength": 1}}, "additionalProperties": true},
+    "visual_style": {"type": "object", "minProperties": 1},
+    "mobile_readability": {"type": "object"},
+    "sources": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/source"}},
+    "confidence": {"enum": ["explicit", "derived", "uncertain"]}
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": ["type", "reference"],
+      "properties": {
+        "type": {"enum": ["gdd", "repository", "user", "rule"]},
+        "reference": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}
