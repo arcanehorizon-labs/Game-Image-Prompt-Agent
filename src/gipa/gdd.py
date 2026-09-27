@@ -1,14 +1,44 @@
-"""Bounded deterministic GDD parsing."""
+"""Bounded deterministic GDD parsing for Markdown, text, DOCX, and text PDFs."""
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import re
+from docx import Document
+from pypdf import PdfReader
 from .io import read_text
 
 @dataclass(frozen=True)
 class Section:
     title: str
     body: str
+
+def read_gdd(path: Path) -> str:
+    """Read a supported GDD format as normalized text."""
+    suffix=path.suffix.lower()
+    if suffix in {".md",".markdown",".txt"}:
+        return read_text(path)
+    if suffix==".docx":
+        doc=Document(path)
+        lines=[]
+        for paragraph in doc.paragraphs:
+            text=paragraph.text.strip()
+            if not text:
+                continue
+            style=(paragraph.style.name or "").lower() if paragraph.style else ""
+            if style.startswith("heading"):
+                try:
+                    level=int(re.search(r"(\d+)",style).group(1))
+                except (AttributeError,ValueError):
+                    level=2
+                lines.append("#"*max(1,min(level,6))+" "+text)
+            else:
+                lines.append(text)
+        return "\n\n".join(lines)
+    if suffix==".pdf":
+        reader=PdfReader(str(path))
+        pages=[page.extract_text() or "" for page in reader.pages]
+        return "\n\n".join(pages)
+    raise ValueError(f"Unsupported GDD format: {path.suffix}. Use .md, .txt, .docx, or .pdf.")
 
 def parse_sections(text: str) -> list[Section]:
     """Split Markdown-like text into heading sections while preserving content."""
@@ -28,6 +58,21 @@ def game_title(path: Path,text: str) -> str:
 
 def _sentences(text: str) -> list[str]:
     return [p.strip(" -*\t") for p in re.split(r"[\r\n]+|(?<=[.!?])\s+",text) if p.strip(" -*\t")]
+
+def _dimensions(text: str) -> dict | None:
+    """Extract the first explicit WxH pixel-like dimension pair."""
+    match=re.search(r"\b(\d{2,5})\s*[x×]\s*(\d{2,5})\b",text,re.I)
+    if not match:
+        return None
+    return {"width":int(match.group(1)),"height":int(match.group(2))}
+
+def _alpha(text: str) -> bool | None:
+    lower=text.lower()
+    if any(term in lower for term in ("transparent background","with transparency","alpha channel","transparent png")):
+        return True
+    if any(term in lower for term in ("opaque background","no transparency","without transparency")):
+        return False
+    return None
 
 STYLE_TERMS=("art style","art direction","visual","aesthetic","palette","lighting","stylized","realistic","cartoon","pixel","low-poly","low poly","neon","gothic","cyberpunk","hand-painted","hand painted","3d","2d")
 STYLE_SECTION_TERMS=("art direction","art style","visual style","visual direction","aesthetic")
@@ -86,13 +131,20 @@ def extract_asset_candidates(sections: list[Section]) -> list[dict]:
                 if key in seen:
                     continue
                 seen.add(key)
-                candidates.append({
+                candidate={
                     "category":category,
                     "description":sentence,
                     "matched_terms":matched,
                     "section":section.title,
                     "confidence":"explicit",
-                })
+                }
+                explicit_dimensions=_dimensions(sentence)
+                if explicit_dimensions:
+                    candidate["dimensions"]=explicit_dimensions
+                alpha=_alpha(sentence)
+                if alpha is not None:
+                    candidate["alpha"]=alpha
+                candidates.append(candidate)
     return candidates[:250]
 
 def infer_required_assets(candidates: list[dict],platforms: list[dict]) -> list[dict]:
@@ -113,8 +165,8 @@ def infer_required_assets(candidates: list[dict],platforms: list[dict]) -> list[
     return result
 
 def analyze_gdd(path: Path) -> dict:
-    """Return deterministic evidence extracted from a Markdown/text GDD."""
-    text=read_text(path)
+    """Return deterministic evidence extracted from a supported GDD."""
+    text=read_gdd(path)
     sections=parse_sections(text)
     style=extract_style_evidence(sections)
     platforms=extract_platform_evidence(sections)
@@ -122,6 +174,7 @@ def analyze_gdd(path: Path) -> dict:
     assets=infer_required_assets(explicit_assets,platforms)
     return {
         "game_title":game_title(path,text),
+        "source_format":path.suffix.lower(),
         "sections":[{"title":s.title,"body":s.body} for s in sections],
         "style_evidence":style,
         "platform_evidence":platforms,
