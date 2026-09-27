@@ -24,20 +24,19 @@ def read_gdd(path: Path) -> str:
             text=paragraph.text.strip()
             if not text:
                 continue
-            style=(paragraph.style.name or "").lower() if paragraph.style else ""
-            if style.startswith("heading"):
-                try:
-                    level=int(re.search(r"(\d+)",style).group(1))
-                except (AttributeError,ValueError):
-                    level=2
+            style=(paragraph.style.name or "").strip().lower() if paragraph.style else ""
+            if style=="title":
+                lines.append("# "+text)
+            elif style.startswith("heading"):
+                match=re.search(r"(\d+)",style)
+                level=int(match.group(1)) if match else 2
                 lines.append("#"*max(1,min(level,6))+" "+text)
             else:
                 lines.append(text)
         return "\n\n".join(lines)
     if suffix==".pdf":
         reader=PdfReader(str(path))
-        pages=[page.extract_text() or "" for page in reader.pages]
-        return "\n\n".join(pages)
+        return "\n\n".join(page.extract_text() or "" for page in reader.pages)
     raise ValueError(f"Unsupported GDD format: {path.suffix}. Use .md, .txt, .docx, or .pdf.")
 
 def parse_sections(text: str) -> list[Section]:
@@ -51,20 +50,31 @@ def parse_sections(text: str) -> list[Section]:
         result.append(Section(match.group(1).strip(),text[match.end():end].strip()))
     return result
 
+def _clean_filename_title(path: Path) -> str:
+    value=path.stem
+    value=re.sub(r"^\d+[_ -]+","",value)
+    value=re.sub(r"(?i)[_ -]+game[_ -]+concept.*$","",value)
+    value=value.replace("_"," ").replace("-"," ").strip()
+    return re.sub(r"\s+"," ",value)
+
 def game_title(path: Path,text: str) -> str:
-    """Prefer the first Markdown H1, then fall back to the filename stem."""
-    match=re.search(r"(?m)^#\s+(.+?)\s*$",text)
-    return match.group(1).strip() if match else path.stem.replace("_"," ").replace("-"," ")
+    """Use a real document title when present; reject numbered section headings."""
+    for match in re.finditer(r"(?m)^#\s+(.+?)\s*$",text):
+        candidate=match.group(1).strip()
+        lower=candidate.lower()
+        if re.match(r"^\d+\s*[.)-]",candidate):
+            continue
+        if any(lower.startswith(prefix) for prefix in ("purpose","scope","overview","high concept","introduction")):
+            continue
+        return candidate
+    return _clean_filename_title(path)
 
 def _sentences(text: str) -> list[str]:
     return [p.strip(" -*\t") for p in re.split(r"[\r\n]+|(?<=[.!?])\s+",text) if p.strip(" -*\t")]
 
 def _dimensions(text: str) -> dict | None:
-    """Extract the first explicit WxH pixel-like dimension pair."""
     match=re.search(r"\b(\d{2,5})\s*[x×]\s*(\d{2,5})\b",text,re.I)
-    if not match:
-        return None
-    return {"width":int(match.group(1)),"height":int(match.group(2))}
+    return {"width":int(match.group(1)),"height":int(match.group(2))} if match else None
 
 def _alpha(text: str) -> bool | None:
     lower=text.lower()
@@ -74,38 +84,70 @@ def _alpha(text: str) -> bool | None:
         return False
     return None
 
-STYLE_TERMS=("art style","art direction","visual","aesthetic","palette","lighting","stylized","realistic","cartoon","pixel","low-poly","low poly","neon","gothic","cyberpunk","hand-painted","hand painted","3d","2d")
-STYLE_SECTION_TERMS=("art direction","art style","visual style","visual direction","aesthetic")
+STYLE_SECTION_TERMS=("art direction","art style","visual style","visual direction","aesthetic","look and feel")
+STYLE_SIGNAL_TERMS=("stylized","realistic","cartoon","pixel","low-poly","low poly","neon","gothic","cyberpunk","hand-painted","hand painted","3d","2d","palette","lighting","silhouette","readability","top-down","high-angle","high angle")
+STYLE_QUESTION_TERMS=("tone","style","visual","look","aesthetic","palette","art direction")
 PLATFORM_TERMS={"android":"android","ios":"ios","iphone":"ios","ipad":"ios","mobile":"mobile","windows":"windows","desktop":"desktop","pc":"desktop"}
+EXCLUDED_SECTION_TERMS=("out of mvp","out of scope","explicitly out","success metric","prototype metric","decision required","open question","questions","ai-assisted","ai assisted","retention direction","monetization","risks")
+NEGATIVE_SENTENCE_PREFIXES=("do not ","don't ","should not ","must not ","avoid ","how ","why ","what ","should ","can players ","players can ","is there ")
 
-ASSET_KEYWORDS={
-    "character":("character","hero","player","protagonist"),
-    "enemy":("enemy","guard","boss","monster"),
-    "environment_background":("background","backdrop"),
-    "environment_texture":("floor","wall","tile","texture","terrain"),
-    "prop":("prop","crate","chest","terminal","vehicle","obstacle"),
-    "ui":("ui","hud","button","panel","menu"),
-    "vfx":("vfx","particle","effect","explosion","glow"),
-    "splash_asset":("splash","loading screen"),
-    "launcher_asset":("launcher icon","app icon","game icon"),
-    "store_asset":("feature graphic","promotional art","promo art","store artwork"),
-}
+ASSET_CONCEPTS=(
+    ("character","player_character",("player","protagonist","hero","thief")),
+    ("enemy","guard_enemy",("guard","guards")),
+    ("enemy","enemy_character",("enemy","enemies","monster","monsters")),
+    ("gameplay_object","security_camera",("camera","cameras","security camera")),
+    ("gameplay_object","security_laser",("laser","lasers","laser beam")),
+    ("gameplay_object","door",("door","doors")),
+    ("gameplay_object","exit",("exit","exits")),
+    ("gameplay_object","loot",("loot","diamond","treasure")),
+    ("prop","terminal",("terminal","security terminal","console")),
+    ("prop","crate",("crate","crates")),
+    ("prop","chest",("chest","chests")),
+    ("environment_texture","floor_tile",("floor tile","floor","flooring")),
+    ("environment_texture","wall_tile",("wall tile","wall","walls")),
+    ("environment_texture","terrain_texture",("terrain","texture")),
+    ("environment_background","background",("background","backdrop")),
+    ("ui","menu_ui",("menu","main menu")),
+    ("ui","hud_ui",("hud","heads-up display","heads up display")),
+    ("ui","button_ui",("button","buttons")),
+    ("ui","panel_ui",("panel","panels")),
+    ("vfx","visual_effect",("vfx","particle","particles","effect","effects")),
+    ("splash_asset","splash_screen",("splash","splash screen","loading screen")),
+    ("launcher_asset","launcher_icon",("launcher icon","app icon","game icon")),
+    ("store_asset","feature_graphic",("feature graphic","store artwork","promotional art","promo art")),
+)
 
-def extract_style_evidence(sections: list[Section]) -> list[dict]:
-    """Collect traceable sentences likely to describe art direction."""
+def _is_excluded_section(title: str) -> bool:
+    lower=title.lower()
+    return any(term in lower for term in EXCLUDED_SECTION_TERMS)
+
+def _looks_like_question_or_nonrequirement(sentence: str) -> bool:
+    lower=sentence.strip().lower()
+    return sentence.strip().endswith("?") or any(lower.startswith(prefix) for prefix in NEGATIVE_SENTENCE_PREFIXES)
+
+def extract_style_evidence(sections: list[Section]) -> tuple[list[dict],list[dict]]:
+    """Return declarative style evidence plus unresolved style questions."""
     evidence=[]
+    questions=[]
     for section in sections:
-        heading_hit=any(term in section.title.lower() for term in STYLE_TERMS)
+        lower_title=section.title.lower()
+        is_style_section=any(term in lower_title for term in STYLE_SECTION_TERMS)
         for sentence in _sentences(section.body):
-            if heading_hit or any(term in sentence.lower() for term in STYLE_TERMS):
+            lower=sentence.lower()
+            if sentence.endswith("?") and any(term in lower for term in STYLE_QUESTION_TERMS):
+                questions.append({"text":sentence,"section":section.title})
+                continue
+            if is_style_section and any(term in lower for term in STYLE_SIGNAL_TERMS):
                 evidence.append({"text":sentence,"section":section.title})
-    return evidence[:40]
+    return evidence[:40],questions[:20]
 
 def extract_platform_evidence(sections: list[Section]) -> list[dict]:
-    """Find explicit platform mentions so platform-dependent assets can be derived."""
+    """Find explicit platform mentions."""
     evidence=[]
     seen=set()
     for section in sections:
+        if _is_excluded_section(section.title):
+            continue
         for sentence in _sentences(section.body):
             lower=sentence.lower()
             for token,platform in PLATFORM_TERMS.items():
@@ -115,26 +157,31 @@ def extract_platform_evidence(sections: list[Section]) -> list[dict]:
     return evidence
 
 def extract_asset_candidates(sections: list[Section]) -> list[dict]:
-    """Extract conservative asset candidates, allowing multiple asset types per sentence."""
+    """Extract concrete asset concepts instead of turning whole prose sentences into assets."""
     candidates=[]
     seen=set()
     for section in sections:
-        if any(term in section.title.lower() for term in STYLE_SECTION_TERMS):
+        lower_title=section.title.lower()
+        if _is_excluded_section(section.title) or any(term in lower_title for term in STYLE_SECTION_TERMS):
             continue
         for sentence in _sentences(section.body):
+            if _looks_like_question_or_nonrequirement(sentence):
+                continue
             lower=sentence.lower()
-            for category,keywords in ASSET_KEYWORDS.items():
-                matched=[k for k in keywords if re.search(rf"\b{re.escape(k)}s?\b",lower)]
+            for category,concept,terms in ASSET_CONCEPTS:
+                matched=[term for term in terms if re.search(rf"\b{re.escape(term)}\b",lower)]
                 if not matched:
                     continue
-                key=(category,lower)
+                key=(category,concept)
                 if key in seen:
                     continue
                 seen.add(key)
                 candidate={
                     "category":category,
-                    "description":sentence,
+                    "concept":concept,
+                    "description":concept.replace("_"," "),
                     "matched_terms":matched,
+                    "source_text":sentence,
                     "section":section.title,
                     "confidence":"explicit",
                 }
@@ -150,17 +197,15 @@ def extract_asset_candidates(sections: list[Section]) -> list[dict]:
 def infer_required_assets(candidates: list[dict],platforms: list[dict]) -> list[dict]:
     """Add only high-confidence platform-derived assets absent from the GDD."""
     result=list(candidates)
-    categories={item["category"] for item in candidates}
+    concepts={item.get("concept") for item in candidates}
     mobile=any(item["platform"] in {"android","ios","mobile"} for item in platforms)
     source=platforms[0] if platforms else None
-    if mobile and "launcher_asset" not in categories:
+    if mobile and "launcher_icon" not in concepts:
         result.append({
-            "category":"launcher_asset",
-            "description":"Mobile application launcher icon",
-            "matched_terms":[],
+            "category":"launcher_asset","concept":"launcher_icon","description":"launcher icon",
+            "matched_terms":[],"source_text":"Derived mobile platform requirement",
             "section":source["section"] if source else "Derived platform requirement",
-            "confidence":"derived",
-            "derivation":"mobile_platform_requires_launcher_icon",
+            "confidence":"derived","derivation":"mobile_platform_requires_launcher_icon",
         })
     return result
 
@@ -168,16 +213,16 @@ def analyze_gdd(path: Path) -> dict:
     """Return deterministic evidence extracted from a supported GDD."""
     text=read_gdd(path)
     sections=parse_sections(text)
-    style=extract_style_evidence(sections)
+    style,style_questions=extract_style_evidence(sections)
     platforms=extract_platform_evidence(sections)
-    explicit_assets=extract_asset_candidates(sections)
-    assets=infer_required_assets(explicit_assets,platforms)
+    assets=infer_required_assets(extract_asset_candidates(sections),platforms)
     return {
         "game_title":game_title(path,text),
         "source_format":path.suffix.lower(),
         "sections":[{"title":s.title,"body":s.body} for s in sections],
         "style_evidence":style,
+        "style_questions":style_questions,
         "platform_evidence":platforms,
         "asset_candidates":assets,
-        "style_status":"resolved" if style else "uncertain",
+        "style_status":"uncertain" if style_questions or not style else "resolved",
     }
