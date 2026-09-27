@@ -41,13 +41,31 @@ CONCEPT_ALIASES={
     "feature_graphic":("feature","graphic"),
 }
 
+MISSING_REFERENCE_CLASSIFIERS=(
+    ("launcher_asset","launcher_icon",("launcher","app_icon","app icon","icon_foreground","mipmap")),
+    ("splash_asset","splash_screen",("splash","launchscreen","launch_screen")),
+    ("store_asset","feature_graphic",("feature_graphic","feature graphic")),
+    ("character","player_character",("player","hero","thief")),
+    ("enemy","guard_enemy",("guard",)),
+    ("gameplay_object","security_camera",("camera",)),
+    ("gameplay_object","security_laser",("laser",)),
+    ("gameplay_object","door",("door",)),
+    ("gameplay_object","exit",("exit",)),
+    ("gameplay_object","loot",("loot","diamond","treasure")),
+    ("prop","terminal",("terminal","console")),
+    ("environment_texture","floor_tile",("floor",)),
+    ("environment_texture","wall_tile",("wall",)),
+    ("ui","menu_ui",("menu",)),
+    ("ui","button_ui",("button",)),
+    ("ui","panel_ui",("panel",)),
+    ("vfx","visual_effect",("vfx","particle","effect")),
+)
+
 def slug(value: str,fallback: str="asset") -> str:
-    """Create deterministic filesystem-safe IDs."""
     value=re.sub(r"[^a-z0-9]+","_",value.lower()).strip("_")
     return value[:56].rstrip("_") or fallback
 
 def load_dimensions(path: Path) -> dict:
-    """Load deterministic dimension defaults."""
     return yaml.safe_load(path.read_text(encoding="utf-8"))["defaults"]
 
 def _ratio(width: int,height: int) -> str:
@@ -55,7 +73,6 @@ def _ratio(width: int,height: int) -> str:
     return f"{value.numerator}:{value.denominator}"
 
 def build_art_style(analysis: dict,override: dict | None=None) -> dict:
-    """Create the style contract; an explicit user override resolves GDD ambiguity."""
     if override:
         result=dict(override)
         result.setdefault("schema_version",1)
@@ -85,7 +102,6 @@ def build_art_style(analysis: dict,override: dict | None=None) -> dict:
     }
 
 def _repository_matches(candidate: dict,repo_scan: dict | None) -> list[dict]:
-    """Return existing images with filenames strongly related to a concrete concept."""
     if not repo_scan:
         return []
     concept=candidate.get("concept","")
@@ -104,11 +120,52 @@ def _dominant_existing_dimensions(matches: list[dict]) -> tuple[int,int] | None:
     size,count=Counter(sizes).most_common(1)[0]
     return size if count>=max(1,len(sizes)//2) else None
 
+def _classify_missing_reference(path: str) -> tuple[str,str] | None:
+    lower=path.lower().replace("\\","/").replace("-","_")
+    for category,concept,markers in MISSING_REFERENCE_CLASSIFIERS:
+        if any(marker in lower for marker in markers):
+            return category,concept
+    return None
+
+def _missing_reference_candidates(repo_scan: dict | None,existing_concepts: set[str]) -> list[dict]:
+    result=[]
+    if not repo_scan:
+        return result
+    for item in repo_scan.get("missing_references",[]):
+        classification=_classify_missing_reference(item["asset_path"])
+        if not classification:
+            continue
+        category,concept=classification
+        if concept in existing_concepts:
+            continue
+        existing_concepts.add(concept)
+        result.append({
+            "category":category,
+            "concept":concept,
+            "description":concept.replace("_"," "),
+            "confidence":"derived",
+            "derivation":"missing_repository_reference",
+            "section":"Repository reference",
+            "source_text":f"Referenced but missing resource: {item['asset_path']}",
+            "target_path":item["asset_path"],
+            "referenced_from":item.get("referenced_from",[]),
+        })
+    return result
+
 def build_manifest(analysis: dict,defaults: dict,repo_scan: dict | None=None) -> dict:
-    """Build a traceable proposed inventory using GDD and existing repository evidence."""
     assets=[]
     names={}
-    for candidate in analysis["asset_candidates"]:
+    candidates=list(analysis["asset_candidates"])
+    concepts={candidate.get("concept") for candidate in candidates}
+    candidates.extend(_missing_reference_candidates(repo_scan,concepts))
+
+    missing_by_concept={}
+    for item in (repo_scan or {}).get("missing_references",[]):
+        classification=_classify_missing_reference(item["asset_path"])
+        if classification:
+            missing_by_concept.setdefault(classification[1],[]).append(item)
+
+    for candidate in candidates:
         category=candidate["category"]
         concept=candidate.get("concept",slug(candidate["description"]))
         base=f"{category}_{slug(concept)}"
@@ -119,6 +176,7 @@ def build_manifest(analysis: dict,defaults: dict,repo_scan: dict | None=None) ->
         fallback=defaults[key]
         matches=_repository_matches(candidate,repo_scan)
         existing_dimensions=_dominant_existing_dimensions(matches)
+        missing_matches=missing_by_concept.get(concept,[])
 
         if "dimensions" in candidate:
             width=int(candidate["dimensions"]["width"]); height=int(candidate["dimensions"]["height"])
@@ -136,25 +194,40 @@ def build_manifest(analysis: dict,defaults: dict,repo_scan: dict | None=None) ->
             known_alpha=[item.get("alpha") for item in matches if item.get("alpha") is not None]
             alpha=Counter(known_alpha).most_common(1)[0][0] if known_alpha else bool(fallback.get("alpha",True))
 
-        filename=f"{asset_id}.png"
+        target_path=candidate.get("target_path")
+        if not target_path and missing_matches:
+            target_path=missing_matches[0]["asset_path"]
+        filename=Path(target_path).name if target_path else f"{asset_id}.png"
+
         existing_paths=[item["path"] for item in matches]
         generation_required=not bool(matches)
+        reason=(
+            "existing_semantic_resource" if matches
+            else "missing_repository_reference" if target_path
+            else "derived_requirement" if candidate["confidence"]=="derived"
+            else "gdd_requirement"
+        )
+        requirement_type="repository" if reason=="missing_repository_reference" else ("rule" if candidate["confidence"]=="derived" else "gdd")
+        requirement_reference=(
+            target_path if reason=="missing_repository_reference"
+            else candidate.get("derivation",candidate["section"])
+        )
+
         assets.append({
             "asset_id":asset_id,
             "filename":filename,
+            "target_path":target_path,
             "category":category,
             "concept":concept,
             "description":candidate["description"],
             "dimensions":{"width":width,"height":height,"aspect_ratio":_ratio(width,height),"source":dimension_source},
             "output":{"format":"png","alpha":alpha},
-            "generation":{
-                "required":generation_required,
-                "reason":"existing_semantic_resource" if matches else ("derived_requirement" if candidate["confidence"]=="derived" else "gdd_requirement"),
-            },
+            "generation":{"required":generation_required,"reason":reason},
             "existing_matches":existing_paths,
+            "referenced_from":candidate.get("referenced_from",[]) or [source for item in missing_matches for source in item.get("referenced_from",[])],
             "source_trace":{"requirement":{
-                "type":"rule" if candidate["confidence"]=="derived" else "gdd",
-                "reference":candidate.get("derivation",candidate["section"]),
+                "type":requirement_type,
+                "reference":requirement_reference,
                 "text":candidate.get("source_text",candidate["description"]),
             }},
             "confidence":candidate["confidence"],
