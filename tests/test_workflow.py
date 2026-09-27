@@ -16,6 +16,9 @@ def test_end_to_end_prompt_workflow(tmp_path: Path) -> None:
     assert any(a["category"]=="environment_background" for a in manifest["assets"])
     approve(out)
     prompts(out)
+    assert (out/"prompts"/"BATCH_PROMPTS.md").exists()
+    assert (out/"prompts"/"CHATGPT_BATCH_PROMPTS.md").exists()
+    assert (out/"prompts"/"GEMINI_BATCH_PROMPTS.md").exists()
     assert validate_project(out)==[]
 
 def test_missing_art_style_blocks_plan(tmp_path: Path) -> None:
