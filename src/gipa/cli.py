@@ -13,7 +13,6 @@ def _schema_path(name: str) -> Path:
     return _project_root()/"schemas"/name
 
 def command_status(args: argparse.Namespace) -> int:
-    """Print a compact state summary without mutating project files."""
     state_path=Path(args.state)
     if not state_path.exists():
         print(f"GIPA state not found: {state_path}")
@@ -25,7 +24,6 @@ def command_status(args: argparse.Namespace) -> int:
     return 0
 
 def command_validate(args: argparse.Namespace) -> int:
-    """Validate one supported machine-readable artifact."""
     path=Path(args.path)
     if not path.exists():
         print(f"File not found: {path}",file=sys.stderr)
@@ -37,8 +35,7 @@ def command_validate(args: argparse.Namespace) -> int:
         errors.extend(validate_manifest_rules(document))
     if errors:
         print("GIPA validation FAILED")
-        for error in errors:
-            print(f"- {error}")
+        for error in errors: print(f"- {error}")
         return 1
     print("GIPA validation PASS")
     print(f"kind: {args.kind}")
@@ -46,15 +43,17 @@ def command_validate(args: argparse.Namespace) -> int:
     return 0
 
 def command_plan(args: argparse.Namespace) -> int:
-    """Create the art-style and asset-inventory review package."""
-    state=plan(Path(args.gdd),Path(args.out),Path(args.game_root) if args.game_root else None)
+    state=plan(
+        Path(args.gdd),Path(args.out),
+        Path(args.game_root) if args.game_root else None,
+        Path(args.style_file) if args.style_file else None,
+    )
     print(f"phase: {state['phase']}")
     print(f"status: {state['status']}")
     print(f"review: {state['outputs']['review']}")
     return 1 if state["status"]=="blocked" else 0
 
 def command_approve(args: argparse.Namespace) -> int:
-    """Approve the inventory and materialize asset specifications."""
     state=approve(Path(args.out))
     print(f"phase: {state['phase']}")
     print(f"status: {state['status']}")
@@ -62,7 +61,6 @@ def command_approve(args: argparse.Namespace) -> int:
     return 0
 
 def command_prompts(args: argparse.Namespace) -> int:
-    """Compile canonical, ChatGPT Images, and Gemini Images prompt packs."""
     state=prompts(Path(args.out))
     print(f"phase: {state['phase']}")
     print(f"status: {state['status']}")
@@ -70,45 +68,37 @@ def command_prompts(args: argparse.Namespace) -> int:
     return 0
 
 def command_validate_project(args: argparse.Namespace) -> int:
-    """Validate the complete generated package."""
     errors=validate_project(Path(args.out))
     if errors:
         print("GIPA project validation FAILED")
-        for error in errors:
-            print(f"- {error}")
+        for error in errors: print(f"- {error}")
         return 1
     print("GIPA project validation PASS")
     return 0
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the stable GIPA CLI surface."""
     parser=argparse.ArgumentParser(prog="gipa")
     sub=parser.add_subparsers(dest="command",required=True)
     p=sub.add_parser("plan",help="Read a GDD and create an asset inventory for review")
     p.add_argument("--gdd",required=True)
     p.add_argument("--game-root")
+    p.add_argument("--style-file",help="Approved ART_STYLE YAML override for unresolved GDD art direction")
     p.add_argument("--out",default=".ai-assets")
     p.set_defaults(func=command_plan)
     a=sub.add_parser("approve",help="Approve the reviewed inventory and create asset specs")
-    a.add_argument("--out",default=".ai-assets")
-    a.set_defaults(func=command_approve)
+    a.add_argument("--out",default=".ai-assets"); a.set_defaults(func=command_approve)
     pr=sub.add_parser("prompts",help="Compile canonical and provider-specific prompt packs")
-    pr.add_argument("--out",default=".ai-assets")
-    pr.set_defaults(func=command_prompts)
+    pr.add_argument("--out",default=".ai-assets"); pr.set_defaults(func=command_prompts)
     vp=sub.add_parser("validate-project",help="Validate the completed GIPA output package")
-    vp.add_argument("--out",default=".ai-assets")
-    vp.set_defaults(func=command_validate_project)
+    vp.add_argument("--out",default=".ai-assets"); vp.set_defaults(func=command_validate_project)
     status=sub.add_parser("status",help="Show current agent state")
-    status.add_argument("--state",default=".ai-assets/STATE.yaml")
-    status.set_defaults(func=command_status)
+    status.add_argument("--state",default=".ai-assets/STATE.yaml"); status.set_defaults(func=command_status)
     validate=sub.add_parser("validate",help="Validate a GIPA artifact")
     validate.add_argument("kind",choices=["state","art-style","manifest","asset-spec"])
-    validate.add_argument("path")
-    validate.set_defaults(func=command_validate)
+    validate.add_argument("path"); validate.set_defaults(func=command_validate)
     return parser
 
 def main() -> None:
-    """Run the CLI and expose the command result as the process exit code."""
     args=build_parser().parse_args()
     try:
         code=args.func(args)
