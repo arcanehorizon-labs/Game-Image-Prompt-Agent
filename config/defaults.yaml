@@ -1,0 +1,10 @@
+schema_version: 1
+project_output_dir: .ai-assets
+state_file: STATE.yaml
+art_style_file: ART_STYLE.yaml
+asset_manifest_file: ASSET_MANIFEST.yaml
+asset_review_file: ASSET_REVIEW.md
+confidence_values:
+  - explicit
+  - derived
+  - uncertain
