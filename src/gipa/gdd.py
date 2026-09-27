@@ -85,7 +85,7 @@ def _alpha(text: str) -> bool | None:
     return None
 
 STYLE_SECTION_TERMS=("art direction","art style","visual style","visual direction","aesthetic","look and feel")
-STYLE_SIGNAL_TERMS=("stylized","realistic","cartoon","pixel","low-poly","low poly","neon","gothic","cyberpunk","hand-painted","hand painted","3d","2d","palette","lighting","silhouette","readability","top-down","high-angle","high angle")
+STYLE_SIGNAL_TERMS=("stylized","realistic","cartoon","pixel","low-poly","low poly","neon","gothic","cyberpunk","hand-painted","hand painted","3d","2d","palette","lighting","silhouette","readability","top-down","high-angle","high angle","geometric","premium")
 STYLE_QUESTION_TERMS=("tone","style","visual","look","aesthetic","palette","art direction")
 PLATFORM_TERMS={"android":"android","ios":"ios","iphone":"ios","ipad":"ios","mobile":"mobile","windows":"windows","desktop":"desktop","pc":"desktop"}
 EXCLUDED_SECTION_TERMS=("out of mvp","out of scope","explicitly out","success metric","prototype metric","decision required","open question","questions","ai-assisted","ai assisted","retention direction","monetization","risks")
@@ -116,6 +116,9 @@ ASSET_CONCEPTS=(
     ("launcher_asset","launcher_icon",("launcher icon","app icon","game icon")),
     ("store_asset","feature_graphic",("feature graphic","store artwork","promotional art","promo art")),
 )
+
+ENVIRONMENT_CONTEXT_TERMS=("room","rooms","corridor","corridors","grid","tilemap","board","facility","office","vault","museum","warehouse","bank")
+STEALTH_CONCEPTS={"player_character","guard_enemy","security_camera","security_laser","door"}
 
 def _is_excluded_section(title: str) -> bool:
     lower=title.lower()
@@ -157,9 +160,9 @@ def extract_platform_evidence(sections: list[Section]) -> list[dict]:
     return evidence
 
 def extract_asset_candidates(sections: list[Section]) -> list[dict]:
-    """Extract concrete asset concepts instead of turning whole prose sentences into assets."""
-    candidates=[]
-    seen=set()
+    """Extract concrete asset concepts and aggregate all supporting GDD evidence."""
+    by_key={}
+    order=[]
     for section in sections:
         lower_title=section.title.lower()
         if _is_excluded_section(section.title) or any(term in lower_title for term in STYLE_SECTION_TERMS):
@@ -173,40 +176,66 @@ def extract_asset_candidates(sections: list[Section]) -> list[dict]:
                 if not matched:
                     continue
                 key=(category,concept)
-                if key in seen:
-                    continue
-                seen.add(key)
-                candidate={
-                    "category":category,
-                    "concept":concept,
-                    "description":concept.replace("_"," "),
-                    "matched_terms":matched,
-                    "source_text":sentence,
-                    "section":section.title,
-                    "confidence":"explicit",
-                }
+                if key not in by_key:
+                    by_key[key]={
+                        "category":category,
+                        "concept":concept,
+                        "description":concept.replace("_"," "),
+                        "matched_terms":[],
+                        "source_texts":[],
+                        "sections":[],
+                        "section":section.title,
+                        "confidence":"explicit",
+                    }
+                    order.append(key)
+                candidate=by_key[key]
+                for term in matched:
+                    if term not in candidate["matched_terms"]:
+                        candidate["matched_terms"].append(term)
+                candidate["source_texts"].append(sentence)
+                if section.title not in candidate["sections"]:
+                    candidate["sections"].append(section.title)
                 explicit_dimensions=_dimensions(sentence)
-                if explicit_dimensions:
+                if explicit_dimensions and "dimensions" not in candidate:
                     candidate["dimensions"]=explicit_dimensions
                 alpha=_alpha(sentence)
-                if alpha is not None:
+                if alpha is not None and "alpha" not in candidate:
                     candidate["alpha"]=alpha
-                candidates.append(candidate)
-    return candidates[:250]
+    for candidate in by_key.values():
+        candidate["source_text"]=candidate["source_texts"][0]
+    return [by_key[key] for key in order][:250]
 
-def infer_required_assets(candidates: list[dict],platforms: list[dict]) -> list[dict]:
-    """Add only high-confidence platform-derived assets absent from the GDD."""
+def infer_required_assets(candidates: list[dict],platforms: list[dict],sections: list[Section]) -> list[dict]:
+    """Add high-confidence platform and gameplay baseline assets with traceable derivations."""
     result=list(candidates)
     concepts={item.get("concept") for item in candidates}
-    mobile=any(item["platform"] in {"android","ios","mobile"} for item in platforms)
-    source=platforms[0] if platforms else None
-    if mobile and "launcher_icon" not in concepts:
+    all_text=" ".join(section.body.lower() for section in sections if not _is_excluded_section(section.title))
+    has_environment_context=any(re.search(rf"\b{re.escape(term)}s?\b",all_text) for term in ENVIRONMENT_CONTEXT_TERMS)
+    stealth_signal=bool(concepts & STEALTH_CONCEPTS)
+
+    def add(category: str,concept: str,description: str,derivation: str) -> None:
+        if concept in {item.get("concept") for item in result}:
+            return
         result.append({
-            "category":"launcher_asset","concept":"launcher_icon","description":"launcher icon",
-            "matched_terms":[],"source_text":"Derived mobile platform requirement",
-            "section":source["section"] if source else "Derived platform requirement",
-            "confidence":"derived","derivation":"mobile_platform_requires_launcher_icon",
+            "category":category,"concept":concept,"description":description,
+            "matched_terms":[],"source_text":"Derived production requirement",
+            "source_texts":["Derived production requirement"],"sections":["Derived requirement"],
+            "section":"Derived requirement","confidence":"derived","derivation":derivation,
         })
+
+    if stealth_signal and has_environment_context:
+        add("environment_texture","floor_tile","floor tile","stealth_environment_requires_floor_surface")
+        add("environment_texture","wall_tile","wall tile","stealth_environment_requires_wall_surface")
+
+    mobile=any(item["platform"] in {"android","ios","mobile"} for item in platforms)
+    if mobile:
+        add("launcher_asset","launcher_icon","launcher icon","mobile_platform_requires_launcher_icon")
+        add("splash_asset","splash_screen","splash screen","mobile_game_requires_launch_visual")
+
+    android=any(item["platform"]=="android" for item in platforms)
+    if android:
+        add("store_asset","feature_graphic","store feature graphic","android_store_presence_requires_feature_graphic")
+
     return result
 
 def analyze_gdd(path: Path) -> dict:
@@ -215,7 +244,7 @@ def analyze_gdd(path: Path) -> dict:
     sections=parse_sections(text)
     style,style_questions=extract_style_evidence(sections)
     platforms=extract_platform_evidence(sections)
-    assets=infer_required_assets(extract_asset_candidates(sections),platforms)
+    assets=infer_required_assets(extract_asset_candidates(sections),platforms,sections)
     return {
         "game_title":game_title(path,text),
         "source_format":path.suffix.lower(),
