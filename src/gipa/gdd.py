@@ -84,7 +84,7 @@ def _alpha(text: str) -> bool | None:
         return False
     return None
 
-STYLE_SECTION_TERMS=("art direction","art style","visual style","visual direction","aesthetic","look and feel")
+STYLE_SECTION_TERMS=("art direction","art and audio direction","art style","visual style","visual direction","aesthetic","look and feel")
 STYLE_SIGNAL_TERMS=("stylized","realistic","cartoon","pixel","low-poly","low poly","neon","gothic","cyberpunk","hand-painted","hand painted","3d","2d","palette","lighting","silhouette","readability","top-down","high-angle","high angle","geometric","premium")
 STYLE_QUESTION_TERMS=("tone","style","visual","look","aesthetic","palette","art direction")
 PLATFORM_TERMS={"android":"android","ios":"ios","iphone":"ios","ipad":"ios","mobile":"mobile","windows":"windows","desktop":"desktop","pc":"desktop"}
