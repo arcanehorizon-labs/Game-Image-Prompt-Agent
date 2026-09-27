@@ -36,9 +36,9 @@ CONCEPT_ALIASES={
     "button_ui":("button",),
     "panel_ui":("panel",),
     "visual_effect":("vfx","effect","particle"),
-    "splash_screen":("splash",),
-    "launcher_icon":("icon","launcher"),
-    "feature_graphic":("feature","graphic"),
+    "splash_screen":("splash","launchscreen","launch_screen"),
+    "launcher_icon":("launcher","app icon","app_icon","icon_foreground","ic_launcher"),
+    "feature_graphic":("feature graphic","feature_graphic"),
 }
 
 MISSING_REFERENCE_CLASSIFIERS=(
@@ -79,7 +79,8 @@ def build_art_style(analysis: dict,override: dict | None=None) -> dict:
         result.setdefault("game",{"title":analysis["game_title"]})
         result["game"]["title"]=analysis["game_title"]
         result.setdefault("sources",[])
-        result["sources"].append({"type":"user","reference":"style override"})
+        if not any(item.get("type")=="user" and item.get("reference")=="style override" for item in result["sources"] if isinstance(item,dict)):
+            result["sources"].append({"type":"user","reference":"style override"})
         result["confidence"]="explicit"
         result.setdefault("visual_style",{})
         result["visual_style"]["status"]="resolved"
@@ -109,7 +110,7 @@ def _repository_matches(candidate: dict,repo_scan: dict | None) -> list[dict]:
     matches=[]
     for image in repo_scan.get("images",[]):
         haystack=(" "+image.get("stem","")+" "+image.get("path","").lower().replace("_"," ").replace("-"," ")+" ")
-        if any(re.search(rf"\b{re.escape(alias)}\b",haystack) for alias in aliases):
+        if any(alias in haystack for alias in aliases):
             matches.append(image)
     return matches[:50]
 
@@ -152,11 +153,39 @@ def _missing_reference_candidates(repo_scan: dict | None,existing_concepts: set[
         })
     return result
 
+def _repository_platform_candidates(repo_scan: dict | None,existing_concepts: set[str]) -> list[dict]:
+    result=[]
+    if not repo_scan:
+        return result
+    platforms=set(repo_scan.get("platforms",[]))
+
+    def add(category: str,concept: str,description: str,derivation: str) -> None:
+        if concept in existing_concepts:
+            return
+        existing_concepts.add(concept)
+        result.append({
+            "category":category,
+            "concept":concept,
+            "description":description,
+            "confidence":"derived",
+            "derivation":derivation,
+            "section":"Repository platform detection",
+            "source_text":f"Derived from repository platforms: {', '.join(sorted(platforms))}",
+        })
+
+    if {"android","ios"} & platforms:
+        add("launcher_asset","launcher_icon","launcher icon","repository_mobile_platform_requires_launcher_icon")
+        add("splash_asset","splash_screen","splash screen","repository_mobile_platform_requires_splash_visual")
+    if "android" in platforms:
+        add("store_asset","feature_graphic","store feature graphic","repository_android_platform_requires_feature_graphic")
+    return result
+
 def build_manifest(analysis: dict,defaults: dict,repo_scan: dict | None=None) -> dict:
     assets=[]
     names={}
     candidates=list(analysis["asset_candidates"])
     concepts={candidate.get("concept") for candidate in candidates}
+    candidates.extend(_repository_platform_candidates(repo_scan,concepts))
     candidates.extend(_missing_reference_candidates(repo_scan,concepts))
 
     missing_by_concept={}
@@ -207,7 +236,7 @@ def build_manifest(analysis: dict,defaults: dict,repo_scan: dict | None=None) ->
             else "derived_requirement" if candidate["confidence"]=="derived"
             else "gdd_requirement"
         )
-        requirement_type="repository" if reason=="missing_repository_reference" else ("rule" if candidate["confidence"]=="derived" else "gdd")
+        requirement_type="repository" if reason=="missing_repository_reference" or candidate.get("derivation","").startswith("repository_") else ("rule" if candidate["confidence"]=="derived" else "gdd")
         requirement_reference=(
             target_path if reason=="missing_repository_reference"
             else candidate.get("derivation",candidate["section"])
