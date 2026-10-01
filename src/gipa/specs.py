@@ -19,17 +19,23 @@ def _style_is_top_down(style: dict) -> bool:
     text=" ".join(str(x).lower() for x in style.get("visual_style",{}).get("summary",[]))
     return "top-down" in text or "top down" in text or "high-angle" in text or "high angle" in text
 
+def _semantic_camera(asset: dict,style: dict | None) -> dict:
+    category=asset["category"]
+    concept=asset.get("concept","")
+    top_down=_style_is_top_down(style or {})
+    if category=="environment_texture":
+        return {"view":"strict_orthographic_top_down","perspective":"none"}
+    if concept in {"player_spacecraft","planet","moon","asteroid","gas_giant","star","black_hole","space_wreck","extraction_gate","salvage_pickup","fuel_cell_pickup"}:
+        return {"view":"centered_2d_gameplay_plane","perspective":"none"}
+    if top_down and category in {"character","enemy","prop","gameplay_object"}:
+        return {"view":"top_down_game_readable","perspective":"controlled_minimal"}
+    return {"view":"game_appropriate","perspective":"controlled"}
+
 def build_asset_spec(asset: dict,style: dict | None=None) -> dict:
     """Create one structured prompt-ready specification from an approved asset."""
     dims=asset["dimensions"]
     category=asset["category"]
-    top_down=_style_is_top_down(style or {})
-    if category=="environment_texture":
-        camera={"view":"strict_orthographic_top_down","perspective":"none"}
-    elif top_down and category in {"character","enemy","prop","gameplay_object"}:
-        camera={"view":"top_down_game_readable","perspective":"controlled_minimal"}
-    else:
-        camera={"view":"game_appropriate","perspective":"controlled"}
+    camera=_semantic_camera(asset,style)
     return {
         "schema_version":1,
         "asset_id":asset["asset_id"],
@@ -50,6 +56,9 @@ def build_asset_spec(asset: dict,style: dict | None=None) -> dict:
         "visual_requirements":{
             "include":[asset.get("description",asset["asset_id"])],
             "exclude":CATEGORY_EXCLUSIONS.get(category,["UI","text","logos"]),
+        },
+        "semantic_context":{
+            "requirement":asset.get("source_trace",{}).get("requirement",{}).get("text",""),
         },
         "style_profile":{"source":"../ART_STYLE.yaml"},
         "source_trace":asset["source_trace"],
