@@ -144,3 +144,44 @@ def test_build_outputs_are_excluded_and_missing_reference_becomes_target_asset(t
 
     scan=yaml.safe_load((out/"STATE.yaml").read_text(encoding="utf-8"))
     assert scan["inputs"]["repository_scan"]["enabled"] is True
+
+
+def test_orbit_salvager_semantics_do_not_leak_generic_stealth_assets(tmp_path: Path) -> None:
+    gdd=tmp_path/"orbit.md"
+    gdd.write_text(
+        "# Orbit Salvager\n\n"
+        "## Game Overview\nAndroid and iOS mobile game. The player pilots a tiny salvage spacecraft.\n\n"
+        "## Celestial Objects\n"
+        "Planet, Moon, Asteroid, Gas Giant, Star, and Black Hole are gameplay bodies.\n"
+        "An Extraction Gate ends the sector. Salvage pickups and Fuel Cells are collected in flight.\n\n"
+        "## Health and Damage\n"
+        "Possible damage sources include enemy drones. Enemies should not be included in the first prototype.\n\n"
+        "## Camera\n"
+        "Camera primarily follows the ship and looks ahead based on velocity.\n\n"
+        "## Visual Style\n"
+        "Stylized minimalist sci-fi with clean silhouettes, neon salvage, and dark space backgrounds.\n\n"
+        "## Visual Juice\n"
+        "Important effects include launch impulse, ship trail, collection burst, shield impact, explosion, gravity distortion, speed lines, and star heat effect.\n",
+        encoding="utf-8",
+    )
+    out=tmp_path/"out"
+    plan(gdd,out)
+    manifest=yaml.safe_load((out/"ASSET_MANIFEST.yaml").read_text(encoding="utf-8"))
+    concepts={a["concept"] for a in manifest["assets"]}
+
+    assert {
+        "player_spacecraft","planet","moon","asteroid","gas_giant","star","black_hole",
+        "extraction_gate","salvage_pickup","fuel_cell_pickup","space_background",
+        "launch_impulse","ship_trail","salvage_collection_burst","shield_impact",
+        "explosion","gravity_distortion","speed_lines","star_heat_effect",
+    } <= concepts
+    assert "enemy_character" not in concepts
+    assert "security_camera" not in concepts
+    assert "floor_tile" not in concepts
+    assert "wall_tile" not in concepts
+
+    approve(out)
+    prompts(out,provider="chatgpt")
+    prompt_text=(out/"prompts"/"CHATGPT_IMAGE_PROMPTS.md").read_text(encoding="utf-8")
+    assert "GAMEPLAY / SOURCE REQUIREMENT" in prompt_text
+    assert "centered_2d_gameplay_plane" in prompt_text
