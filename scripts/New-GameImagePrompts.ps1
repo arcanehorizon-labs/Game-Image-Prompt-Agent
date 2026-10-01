@@ -58,12 +58,12 @@ function Read-ExistingDirectory([string]$Label, [string]$Current) {
     }
 }
 
-function Invoke-Gipa([string[]]$Args, [int[]]$Allowed = @(0)) {
+function Invoke-Gipa([string[]]$GipaArgs, [int[]]$AllowedExitCodes = @(0)) {
     Write-Host ''
-    Write-Host ('gipa ' + ($Args -join ' ')) -ForegroundColor Cyan
-    & gipa @Args
+    Write-Host ('gipa ' + ($GipaArgs -join ' ')) -ForegroundColor Cyan
+    & gipa @GipaArgs
     $code = $LASTEXITCODE
-    if ($Allowed -notcontains $code) { throw "GIPA failed with exit code $code." }
+    if ($AllowedExitCodes -notcontains $code) { throw "GIPA failed with exit code $code." }
     return $code
 }
 
@@ -109,7 +109,7 @@ if (Test-Path -LiteralPath $OutputDir) {
 
 $planArgs = @('plan','--gdd',$GddPath,'--game-root',$GameRoot,'--out',$OutputDir)
 if (-not [string]::IsNullOrWhiteSpace($StyleFile)) { $StyleFile = Read-ExistingFile 'Approved style YAML' $StyleFile; $planArgs += @('--style-file',$StyleFile) }
-Invoke-Gipa $planArgs @(0,1) | Out-Null
+Invoke-Gipa -GipaArgs $planArgs -AllowedExitCodes @(0,1) | Out-Null
 $status = Get-GipaStatus (Join-Path $OutputDir 'STATE.yaml')
 
 if ($status -eq 'blocked') {
@@ -119,7 +119,7 @@ if ($status -eq 'blocked') {
     if ([string]::IsNullOrWhiteSpace($choice)) { $StyleFile = New-StyleFile (Join-Path $GameRoot 'APPROVED_ART_STYLE.yaml') }
     else { $StyleFile = Read-ExistingFile 'Approved style YAML' $choice }
     $planArgs = @('plan','--gdd',$GddPath,'--game-root',$GameRoot,'--style-file',$StyleFile,'--out',$OutputDir)
-    Invoke-Gipa $planArgs @(0) | Out-Null
+    Invoke-Gipa -GipaArgs $planArgs -AllowedExitCodes @(0) | Out-Null
     $status = Get-GipaStatus (Join-Path $OutputDir 'STATE.yaml')
 }
 
@@ -134,13 +134,13 @@ Write-Host ''
 Write-Host "Manifest: $manifest"
 try { Invoke-Item $review; Invoke-Item $manifest } catch {}
 Read-Host 'Review/edit the manifest, then press ENTER to validate it'
-Invoke-Gipa @('validate','manifest',$manifest) | Out-Null
+Invoke-Gipa -GipaArgs @('validate','manifest',$manifest) | Out-Null
 $approval = Read-Host 'Approve this inventory and create prompts? [Y/n]'
 if (-not ([string]::IsNullOrWhiteSpace($approval) -or $approval -match '^(y|yes)$')) { Write-Host 'Stopped before prompt generation.'; exit 0 }
 
-Invoke-Gipa @('approve','--out',$OutputDir) | Out-Null
-Invoke-Gipa @('prompts','--out',$OutputDir) | Out-Null
-Invoke-Gipa @('validate-project','--out',$OutputDir) | Out-Null
+Invoke-Gipa -GipaArgs @('approve','--out',$OutputDir) | Out-Null
+Invoke-Gipa -GipaArgs @('prompts','--out',$OutputDir) | Out-Null
+Invoke-Gipa -GipaArgs @('validate-project','--out',$OutputDir) | Out-Null
 
 $jsonName = switch ($Provider) { 'ChatGPT' { 'chatgpt_images.json' } 'Gemini' { 'gemini_images.json' } default { 'canonical.json' } }
 $pack = Get-Content -LiteralPath (Join-Path $OutputDir ('prompts\' + $jsonName)) -Raw | ConvertFrom-Json
