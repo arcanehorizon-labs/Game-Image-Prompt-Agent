@@ -100,7 +100,7 @@ ASSET_CONCEPTS=(
     ("character","player_spacecraft",("player spacecraft","salvage spacecraft","player ship","spacecraft")),
     ("character","player_character",("protagonist","hero","thief")),
     ("enemy","guard_enemy",("security guard","guard","guards")),
-    ("enemy","enemy_character",("enemy character","enemy drone","enemy drones","monster","monsters")),
+    ("enemy","enemy_character",("enemy character","enemy","enemies","enemy drone","enemy drones","monster","monsters")),
     ("gameplay_object","security_camera",("security camera","security cameras","surveillance camera","surveillance cameras")),
     ("gameplay_object","security_laser",("security laser","security lasers","laser beam","laser beams")),
     ("gameplay_object","door",("door","doors")),
@@ -261,6 +261,9 @@ def infer_required_assets(candidates: list[dict],platforms: list[dict],sections:
     if stealth_signal and has_environment_context:
         add("environment_texture","floor_tile","floor tile","stealth_environment_requires_floor_surface")
         add("environment_texture","wall_tile","wall tile","stealth_environment_requires_wall_surface")
+
+    if "space background" in all_text or "star field" in all_text or "starfield" in all_text:
+        add("environment_background","space_background","space background","explicit_space_background_direction")
 
     mobile=any(item["platform"] in {"android","ios","mobile"} for item in platforms)
     if mobile:
