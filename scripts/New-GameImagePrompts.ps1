@@ -14,19 +14,47 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Normalize-InputPath([string]$Value) {
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $Value }
+    $Value = $Value.Trim()
+    if (($Value.StartsWith('"') -and $Value.EndsWith('"')) -or ($Value.StartsWith("'") -and $Value.EndsWith("'"))) {
+        $Value = $Value.Substring(1, $Value.Length - 2).Trim()
+    }
+    return [Environment]::ExpandEnvironmentVariables($Value)
+}
+
+function Show-NearbyFiles([string]$Value) {
+    try {
+        $normalized = Normalize-InputPath $Value
+        $parent = Split-Path $normalized -Parent
+        if (-not [string]::IsNullOrWhiteSpace($parent) -and (Test-Path -LiteralPath $parent -PathType Container)) {
+            Write-Host 'Files available in that folder:' -ForegroundColor Yellow
+            Get-ChildItem -LiteralPath $parent -File |
+                Where-Object { $_.Extension -in @('.md','.txt','.docx','.pdf') } |
+                Select-Object -First 20 -ExpandProperty FullName |
+                ForEach-Object { Write-Host ('  ' + $_) }
+        }
+    } catch {}
+}
+
 function Read-ExistingFile([string]$Label, [string]$Current) {
     while ($true) {
-        if (-not [string]::IsNullOrWhiteSpace($Current) -and (Test-Path -LiteralPath $Current -PathType Leaf)) { return (Resolve-Path $Current).Path }
+        $Current = Normalize-InputPath $Current
+        if (-not [string]::IsNullOrWhiteSpace($Current) -and (Test-Path -LiteralPath $Current -PathType Leaf)) { return (Resolve-Path -LiteralPath $Current).Path }
+        if (-not [string]::IsNullOrWhiteSpace($Current)) {
+            Write-Warning ('File not found: ' + $Current)
+            Show-NearbyFiles $Current
+        }
         $Current = Read-Host $Label
-        if (-not (Test-Path -LiteralPath $Current -PathType Leaf)) { Write-Warning 'File not found.'; $Current = $null }
     }
 }
 
 function Read-ExistingDirectory([string]$Label, [string]$Current) {
     while ($true) {
-        if (-not [string]::IsNullOrWhiteSpace($Current) -and (Test-Path -LiteralPath $Current -PathType Container)) { return (Resolve-Path $Current).Path }
+        $Current = Normalize-InputPath $Current
+        if (-not [string]::IsNullOrWhiteSpace($Current) -and (Test-Path -LiteralPath $Current -PathType Container)) { return (Resolve-Path -LiteralPath $Current).Path }
+        if (-not [string]::IsNullOrWhiteSpace($Current)) { Write-Warning ('Directory not found: ' + $Current) }
         $Current = Read-Host $Label
-        if (-not (Test-Path -LiteralPath $Current -PathType Container)) { Write-Warning 'Directory not found.'; $Current = $null }
     }
 }
 
