@@ -90,28 +90,51 @@ STYLE_QUESTION_TERMS=("tone","style","visual","look","aesthetic","palette","art 
 PLATFORM_TERMS={"android":"android","ios":"ios","iphone":"ios","ipad":"ios","mobile":"mobile","windows":"windows","desktop":"desktop","pc":"desktop"}
 EXCLUDED_SECTION_TERMS=("out of mvp","out of scope","explicitly out","success metric","prototype metric","decision required","open question","questions","ai-assisted","ai assisted","retention direction","monetization","risks")
 NEGATIVE_SENTENCE_PREFIXES=("do not ","don't ","should not ","must not ","avoid ","how ","why ","what ","should ","can players ","players can ","is there ")
+NEGATIVE_SENTENCE_TERMS=(" should not "," must not "," not included "," not required "," explicitly excluded "," excluded from "," without ")
+FUTURE_ONLY_TERMS=("later versions may ","post-launch ","possible later ","can be added later ","future version ","future versions ")
 
 ASSET_CONCEPTS=(
-    ("character","player_character",("player","protagonist","hero","thief")),
-    ("enemy","guard_enemy",("guard","guards")),
-    ("enemy","enemy_character",("enemy","enemies","monster","monsters")),
-    ("gameplay_object","security_camera",("camera","cameras","security camera")),
-    ("gameplay_object","security_laser",("laser","lasers","laser beam")),
+    # Prefer semantic subjects over generic role words. "player" and "camera" alone are
+    # intentionally excluded because they frequently describe controls/presentation rather
+    # than an image asset.
+    ("character","player_spacecraft",("player spacecraft","salvage spacecraft","player ship","spacecraft")),
+    ("character","player_character",("protagonist","hero","thief")),
+    ("enemy","guard_enemy",("security guard","guard","guards")),
+    ("enemy","enemy_character",("enemy character","enemy drone","enemy drones","monster","monsters")),
+    ("gameplay_object","security_camera",("security camera","security cameras","surveillance camera","surveillance cameras")),
+    ("gameplay_object","security_laser",("security laser","security lasers","laser beam","laser beams")),
     ("gameplay_object","door",("door","doors")),
-    ("gameplay_object","exit",("exit","exits")),
+    ("gameplay_object","extraction_gate",("extraction gate","extraction beacon","extraction point")),
+    ("gameplay_object","salvage_pickup",("salvage pickup","salvage pickups","salvage piece","salvage pieces","scrap pickup","scrap pickups")),
+    ("gameplay_object","fuel_cell_pickup",("fuel cell","fuel cells","energy cell","energy cells")),
+    ("gameplay_object","planet",("planet","planets")),
+    ("gameplay_object","moon",("moon","moons")),
+    ("gameplay_object","asteroid",("asteroid","asteroids")),
+    ("gameplay_object","gas_giant",("gas giant","gas giants")),
+    ("gameplay_object","star",("star","stars")),
+    ("gameplay_object","black_hole",("black hole","black holes")),
+    ("gameplay_object","space_wreck",("space station","space stations","wreck","wrecks")),
     ("gameplay_object","loot",("loot","diamond","treasure")),
-    ("prop","terminal",("terminal","security terminal","console")),
+    ("prop","terminal",("security terminal","terminal","console")),
     ("prop","crate",("crate","crates")),
     ("prop","chest",("chest","chests")),
-    ("environment_texture","floor_tile",("floor tile","floor","flooring")),
-    ("environment_texture","wall_tile",("wall tile","wall","walls")),
-    ("environment_texture","terrain_texture",("terrain","texture")),
+    ("environment_texture","floor_tile",("floor tile","flooring")),
+    ("environment_texture","wall_tile",("wall tile",)),
+    ("environment_texture","terrain_texture",("terrain texture",)),
+    ("environment_background","space_background",("space background","space backgrounds","star field","starfield")),
     ("environment_background","background",("background","backdrop")),
-    ("ui","menu_ui",("menu","main menu")),
+    ("ui","menu_ui",("main menu","menu ui")),
     ("ui","hud_ui",("hud","heads-up display","heads up display")),
-    ("ui","button_ui",("button","buttons")),
-    ("ui","panel_ui",("panel","panels")),
-    ("vfx","visual_effect",("vfx","particle","particles","effect","effects")),
+    ("ui","button_ui",("ui button","ui buttons")),
+    ("ui","panel_ui",("ui panel","ui panels")),
+    ("vfx","ship_trail",("ship trail","flight trail","orbital trail")),
+    ("vfx","launch_impulse",("launch impulse","thruster effect","thruster burst")),
+    ("vfx","salvage_collection_burst",("collection burst","salvage collection burst")),
+    ("vfx","shield_impact",("shield impact","shield hit")),
+    ("vfx","explosion",("explosion","ship explosion")),
+    ("vfx","gravity_distortion",("gravity distortion","gravitational distortion")),
+    ("vfx","speed_lines",("speed lines",)),
+    ("vfx","star_heat_effect",("star heat effect","heat effect")),
     ("splash_asset","splash_screen",("splash","splash screen","loading screen")),
     ("launcher_asset","launcher_icon",("launcher icon","app icon","game icon")),
     ("store_asset","feature_graphic",("feature graphic","store artwork","promotional art","promo art")),
@@ -125,8 +148,14 @@ def _is_excluded_section(title: str) -> bool:
     return any(term in lower for term in EXCLUDED_SECTION_TERMS)
 
 def _looks_like_question_or_nonrequirement(sentence: str) -> bool:
-    lower=sentence.strip().lower()
-    return sentence.strip().endswith("?") or any(lower.startswith(prefix) for prefix in NEGATIVE_SENTENCE_PREFIXES)
+    lower=" "+sentence.strip().lower()+" "
+    stripped=sentence.strip().lower()
+    return (
+        sentence.strip().endswith("?")
+        or any(stripped.startswith(prefix) for prefix in NEGATIVE_SENTENCE_PREFIXES)
+        or any(term in lower for term in NEGATIVE_SENTENCE_TERMS)
+        or any(stripped.startswith(term) for term in FUTURE_ONLY_TERMS)
+    )
 
 def extract_style_evidence(sections: list[Section]) -> tuple[list[dict],list[dict]]:
     """Return declarative style evidence plus unresolved style questions."""
@@ -167,11 +196,17 @@ def extract_asset_candidates(sections: list[Section]) -> list[dict]:
         lower_title=section.title.lower()
         if _is_excluded_section(section.title) or any(term in lower_title for term in STYLE_SECTION_TERMS):
             continue
-        for sentence in _sentences(section.body):
+        sentences=_sentences(section.body)
+        negative_text=" ".join(sentence.lower() for sentence in sentences if _looks_like_question_or_nonrequirement(sentence))
+        for sentence in sentences:
             if _looks_like_question_or_nonrequirement(sentence):
                 continue
             lower=sentence.lower()
             for category,concept,terms in ASSET_CONCEPTS:
+                # If this section explicitly says a concept is not included/required, do not
+                # promote another mention of the same concept into the production inventory.
+                if any(re.search(rf"\b{re.escape(term)}\b",negative_text) for term in terms):
+                    continue
                 matched=[term for term in terms if re.search(rf"\b{re.escape(term)}\b",lower)]
                 if not matched:
                     continue
