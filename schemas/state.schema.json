@@ -5,31 +5,12 @@
   "required": ["schema_version", "phase", "status", "inputs", "outputs", "next_action"],
   "properties": {
     "schema_version": {"const": 1},
-    "phase": {"enum": ["foundation", "art_style", "asset_inventory", "asset_specs", "prompt_compilation", "validation"]},
+    "phase": {"enum": ["foundation", "art_style", "asset_inventory", "asset_specs", "prompt_compilation", "validation", "image_generation", "image_approval"]},
     "status": {"enum": ["initialized", "in_progress", "awaiting_human_approval", "blocked", "complete"]},
     "inputs": {"type": "object"},
     "outputs": {"type": "object"},
-    "counts": {
-      "type": "object",
-      "properties": {
-        "total_assets": {"type": "integer", "minimum": 0},
-        "explicit": {"type": "integer", "minimum": 0},
-        "derived": {"type": "integer", "minimum": 0},
-        "uncertain": {"type": "integer", "minimum": 0}
-      },
-      "additionalProperties": false
-    },
-    "next_action": {
-      "type": "object",
-      "required": ["type"],
-      "properties": {
-        "type": {"enum": ["none", "human_review", "run_command", "resolve_blocker"]},
-        "artifact": {"type": "string"},
-        "command": {"type": "string"},
-        "message": {"type": "string"}
-      },
-      "additionalProperties": false
-    }
+    "counts": {"type": "object", "properties": {"total_assets":{"type":"integer","minimum":0},"explicit":{"type":"integer","minimum":0},"derived":{"type":"integer","minimum":0},"uncertain":{"type":"integer","minimum":0}}, "additionalProperties": false},
+    "next_action": {"type":"object","required":["type"],"properties":{"type":{"enum":["none","human_review","run_command","resolve_blocker"]},"artifact":{"type":"string"},"command":{"type":"string"},"message":{"type":"string"}},"additionalProperties":false}
   },
   "additionalProperties": false
 }
