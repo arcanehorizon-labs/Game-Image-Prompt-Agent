@@ -181,7 +181,7 @@ def test_orbit_salvager_semantics_do_not_leak_generic_stealth_assets(tmp_path: P
     assert "wall_tile" not in concepts
 
     approve(out)
-    prompts(out,provider="chatgpt")
+    prompts(out)
     prompt_text=(out/"prompts"/"CHATGPT_IMAGE_PROMPTS.md").read_text(encoding="utf-8")
     assert "GAMEPLAY / SOURCE REQUIREMENT" in prompt_text
     assert "centered_2d_gameplay_plane" in prompt_text
