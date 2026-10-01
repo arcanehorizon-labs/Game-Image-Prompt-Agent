@@ -17,6 +17,11 @@ def compile_canonical(spec: dict,style: dict,variant: str="A") -> str:
         f"Create one production image asset for the game '{style['game']['title']}'.","",
         "ASSET",spec["subject"]["primary"],"",
         "PURPOSE",str(spec["purpose"]),"",
+    ]
+    requirement=str(spec.get("semantic_context",{}).get("requirement","")).strip()
+    if requirement:
+        lines.extend(["GAMEPLAY / SOURCE REQUIREMENT",requirement,""])
+    lines.extend([
         "ART DIRECTION",*(_style_lines(style) or ["Use the approved project art style exactly."]),"",
         "COMPOSITION AND CAMERA",
         f"Camera/view: {spec.get('camera',{}).get('view','game_appropriate')}.",
@@ -31,7 +36,7 @@ def compile_canonical(spec: dict,style: dict,variant: str="A") -> str:
         "If the image generator cannot emit the exact target pixel dimensions, use the closest larger supported canvas at the same aspect ratio, preserve all critical content inside a safe central area, and prepare the image for deterministic crop/resize to the exact production size.",
         f"Variant: {variant} — {treatments[variant]}.","",
         "Do not change the requested gameplay semantics, camera rules, target dimensions, or project visual identity.",
-    ]
+    ])
     return "\n".join(lines).strip()+"\n"
 
 def adapt_chatgpt(canonical: str) -> str:
