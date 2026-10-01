@@ -3,8 +3,16 @@ providers:
   canonical:
     semantic_source_of_truth: true
   chatgpt_images:
-    enabled: false
-    note: "Provider adapter is introduced in GIPA-5."
+    enabled: true
+    note: "Prompt adapter for ChatGPT/OpenAI image generation."
+  openai_images:
+    enabled: true
+    models:
+      - gpt-image-2.5-flare
+      - gpt-image-2.5-sunburst
+    default_model: gpt-image-2.5-flare
+    api_key_environment: OPENAI_API_KEY
+    visual_approval_required: true
   gemini_images:
     enabled: false
-    note: "Provider adapter is introduced in GIPA-5."
+    note: "Prompt adapter exists; provider execution is not implemented."

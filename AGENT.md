@@ -2,11 +2,11 @@
 
 ## Purpose
 
-Convert a game's GDD and optional bounded repository evidence into a deterministic, reviewable image-asset plan and production-ready prompts for external image generators.
+Convert a game's GDD and optional bounded repository evidence into a deterministic, reviewable image-asset plan, production-ready prompts, and explicitly requested staged image generation.
 
-## Non-goal
+## Non-goals
 
-GIPA does not generate, download, approve, or commit images.
+GIPA does not silently call providers, visually approve its own output, overwrite game assets by default, or create git commits for generated images.
 
 ## Core rules
 
@@ -25,3 +25,8 @@ GIPA does not generate, download, approve, or commit images.
 13. Three prompt variants may vary detail treatment only, not gameplay semantics or technical requirements.
 14. Keep repository inspection bounded and local.
 15. Human review is mandatory between planning and prompt compilation.
+16. Provider execution must be an explicit command; no hidden network calls.
+17. Provider secrets must come from environment/secrets storage and must never be persisted in project artifacts.
+18. Generated images must pass deterministic technical validation before visual review.
+19. Human visual review is mandatory before generated images are copied into game asset target paths.
+20. GIPA never creates git commits for generated images.
