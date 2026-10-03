@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "game-image-prompt-agent"
+version = "1.0.0"
+description = "GDD-driven game image asset planning and prompt generation for ChatGPT Images and Gemini Images."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "PyYAML>=6.0.2",
+  "jsonschema>=4.23.0",
+  "python-docx>=1.1.2",
+  "pypdf>=5.0.0",
+  "Pillow>=11.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3"]
+
+[project.scripts]
+gipa = "gipa.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gipa"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

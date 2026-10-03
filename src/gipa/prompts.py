@@ -1,0 +1,51 @@
+"""Canonical prompt compilation and lightweight provider adapters."""
+from __future__ import annotations
+
+def _style_lines(style: dict) -> list[str]:
+    return [str(item).strip() for item in style.get("visual_style",{}).get("summary",[]) if str(item).strip()]
+
+def compile_canonical(spec: dict,style: dict,variant: str="A") -> str:
+    """Compile a prompt from structured data without changing semantics."""
+    prod=spec["dimensions"]["production"]
+    alpha="transparent background" if spec["output"]["alpha"] else "opaque background"
+    treatments={
+        "A":"balanced production treatment",
+        "B":"cleaner treatment with lower decorative detail density",
+        "C":"richer treatment with moderate detail while preserving readability",
+    }
+    lines=[
+        f"Create one production image asset for the game '{style['game']['title']}'.","",
+        "ASSET",spec["subject"]["primary"],"",
+        "PURPOSE",str(spec["purpose"]),"",
+        "ART DIRECTION",*(_style_lines(style) or ["Use the approved project art style exactly."]),"",
+        "COMPOSITION AND CAMERA",
+        f"Camera/view: {spec.get('camera',{}).get('view','game_appropriate')}.",
+        f"Perspective: {spec.get('camera',{}).get('perspective','controlled')}.",
+        f"Seamless: {'yes' if spec.get('composition',{}).get('seamless') else 'no'}.","",
+        "MUST INCLUDE",*[f"- {x}" for x in spec["visual_requirements"]["include"]],"",
+        "DO NOT INCLUDE",*[f"- {x}" for x in spec["visual_requirements"]["exclude"]],"",
+        "TECHNICAL TARGET",
+        f"Target production size: {prod['width']} × {prod['height']} pixels.",
+        f"Aspect ratio: {spec['dimensions']['aspect_ratio']}.",
+        f"Output: {spec['output']['format'].upper()}, {alpha}.",
+        "If the image generator cannot emit the exact target pixel dimensions, use the closest larger supported canvas at the same aspect ratio, preserve all critical content inside a safe central area, and prepare the image for deterministic crop/resize to the exact production size.",
+        f"Variant: {variant} — {treatments[variant]}.","",
+        "Do not change the requested gameplay semantics, camera rules, target dimensions, or project visual identity.",
+    ]
+    return "\n".join(lines).strip()+"\n"
+
+def adapt_chatgpt(canonical: str) -> str:
+    return "Generate one standalone production image. Follow the specification exactly, preserve the requested safe composition, and do not add unrequested objects.\n\n"+canonical
+
+def adapt_gemini(canonical: str) -> str:
+    return "Create one standalone game-production image from the following specification. Preserve every required constraint, safe composition, and semantic requirement; do not add unrelated content.\n\n"+canonical
+
+def prompt_record(spec: dict,provider: str,text: str,variant: str) -> dict:
+    return {
+        "asset_id":spec["asset_id"],
+        "category":spec["purpose"],
+        "variant":variant,
+        "production_dimensions":dict(spec["dimensions"]["production"]),
+        "text":text,
+        "provider":provider,
+    }

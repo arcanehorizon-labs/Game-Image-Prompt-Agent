@@ -1,0 +1,57 @@
+schema_version: 1
+game:
+  title: Tiny Heist
+
+visual_style:
+  status: resolved
+  summary:
+    - Premium stylized 3D visual language with playful suspense and a polished mobile-game presentation.
+    - Clean geometric environments, smooth shading, crisp silhouettes, and strong readability at small screen sizes.
+    - Deep midnight blue and purple form the primary palette, with cyan highlights, restrained magenta accents, and limited warm accents where useful.
+    - Lighting is controlled and readable, with subtle neon practicals and restrained bloom rather than heavy glow.
+    - Gameplay presentation uses a clean top-down or high-angle viewpoint with strong security-cone, timing, path, and interaction readability.
+    - Character and enemy silhouettes should remain simple, readable, and expressive without frame-heavy detail.
+    - Environment art should remain modular so layout, lighting accents, and props can vary without baking puzzle geometry into the artwork.
+    - The overall tone is a stylish, playful spy-tech heist rather than horror, gritty realism, or slapstick comedy.
+    - Planning mode should read cleaner and calmer; replay/action presentation may use slightly stronger cyan/magenta lighting accents and motion emphasis without changing the underlying asset style.
+
+  palette:
+    primary:
+      - deep midnight blue
+      - deep purple
+    highlights:
+      - cyan
+    accents:
+      - restrained magenta
+      - limited warm amber
+      - limited security red
+
+  rendering:
+    type: premium stylized 3D
+    photorealistic: false
+
+  geometry:
+    - clean geometric forms
+    - crisp silhouettes
+    - uncluttered surfaces
+
+  lighting:
+    style: controlled practical neon
+    bloom: restrained
+    mobile_readability: high
+
+  camera:
+    gameplay: top-down or high-angle
+    textures: orthographic top-down
+    splash: cinematic landscape
+
+mobile_readability:
+  enabled: true
+  avoid_micro_detail: true
+  silhouette_priority: high
+
+sources:
+  - type: user
+    reference: approved Tiny Heist art direction
+
+confidence: explicit

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "asset-manifest.schema.json",
+  "type": "object",
+  "required": ["schema_version", "game", "status", "assets"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "game": {"type": "string", "minLength": 1},
+    "status": {"enum": ["proposed", "awaiting_asset_inventory_approval", "approved", "blocked"]},
+    "assets": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/asset"}
+    }
+  },
+  "$defs": {
+    "asset": {
+      "type": "object",
+      "required": ["asset_id", "filename", "category", "dimensions", "output", "generation", "source_trace", "confidence"],
+      "properties": {
+        "asset_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$"},
+        "filename": {"type": "string", "minLength": 1},
+        "category": {
+          "enum": ["visual_only", "gameplay_object", "environment_texture", "environment_background", "character", "enemy", "prop", "ui", "vfx", "store_asset", "launcher_asset", "splash_asset"]
+        },
+        "dimensions": {
+          "type": "object",
+          "required": ["width", "height", "aspect_ratio", "source"],
+          "properties": {
+            "width": {"type": "integer", "minimum": 1},
+            "height": {"type": "integer", "minimum": 1},
+            "aspect_ratio": {"type": "string", "pattern": "^[1-9][0-9]*:[1-9][0-9]*$"},
+            "source": {"type": "object", "required": ["type"], "properties": {"type": {"enum": ["implementation", "existing_resource", "gdd", "platform", "project_config", "category_default", "user"]}}, "additionalProperties": true}
+          },
+          "additionalProperties": false
+        },
+        "output": {
+          "type": "object",
+          "required": ["format", "alpha"],
+          "properties": {"format": {"enum": ["png", "jpg", "jpeg", "webp"]}, "alpha": {"type": "boolean"}},
+          "additionalProperties": true
+        },
+        "generation": {
+          "type": "object",
+          "required": ["required"],
+          "properties": {"required": {"type": "boolean"}},
+          "additionalProperties": true
+        },
+        "source_trace": {"type": "object", "minProperties": 1},
+        "confidence": {"enum": ["explicit", "derived", "uncertain"]}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

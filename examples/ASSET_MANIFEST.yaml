@@ -1,0 +1,24 @@
+schema_version: 1
+game: Example Game
+status: proposed
+assets:
+  - asset_id: ch01_floor_main
+    filename: chapter01_floor_main.png
+    category: environment_texture
+    dimensions:
+      width: 2048
+      height: 2048
+      aspect_ratio: "1:1"
+      source:
+        type: category_default
+        rule: seamless_environment_texture
+    output:
+      format: png
+      alpha: false
+    generation:
+      required: true
+    source_trace:
+      requirement:
+        type: derived
+        reference: example
+    confidence: derived

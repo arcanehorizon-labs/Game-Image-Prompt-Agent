@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "prompt-pack.schema.json",
+  "type": "object",
+  "required": ["schema_version", "provider", "prompts"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "provider": {"enum": ["canonical", "chatgpt_images", "gemini_images"]},
+    "prompts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["asset_id", "production_dimensions", "text"],
+        "properties": {
+          "asset_id": {"type": "string"},
+          "production_dimensions": {
+            "type": "object",
+            "required": ["width", "height"],
+            "properties": {
+              "width": {"type": "integer", "minimum": 1},
+              "height": {"type": "integer", "minimum": 1}
+            },
+            "additionalProperties": false
+          },
+          "text": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}
